@@ -1,4 +1,3 @@
-You accidentally copied my explanation text along with the code — the file starts with "The DataFeed module broke things..." instead of import http. The file in this workspace is correct. Copy only what's inside the code block below — starting exactly with import http and ending with the last });:
 import http from 'node:http';
 
 const PORT          = process.env.PORT           || 3001;
