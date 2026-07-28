@@ -1,4 +1,4 @@
-The DataFeed module broke things before I could revert it — you deployed that broken version. The file here is already fixed back to ProductSearch. Just paste this and redeploy:
+You accidentally copied my explanation text along with the code — the file starts with "The DataFeed module broke things..." instead of import http. The file in this workspace is correct. Copy only what's inside the code block below — starting exactly with import http and ending with the last });:
 import http from 'node:http';
 
 const PORT          = process.env.PORT           || 3001;
@@ -112,9 +112,6 @@ function mapCaItem(item, sectionTag, categorySlug) {
   };
 }
 
-// ── AvantLink API ───────────────────────────────────────────────────────────
-
-const AL_MERCHANT_IDS = '10270,12809';
 const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|Buy+URL|Abbreviated+Description|Price+Discount+Percent|Merchant+Name|Merchant+Id|Product+Id';
 
 async function alSearch(keywords, opts = {}) {
