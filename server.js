@@ -114,7 +114,8 @@ const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|B
 
 async function alSearch(keywords, opts = {}) {
   const count = Math.min(opts.itemCount ?? 20, 20);
-  const url = `${AL_BASE}?module=ProductSearch&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&search_term=${encodeURIComponent(keywords)}&output=json&search_results_count=${count}&search_results_fields=${AL_FIELDS}`;
+  let url = `${AL_BASE}?module=ProductSearch&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&search_term=${encodeURIComponent(keywords)}&output=json&search_results_count=${count}&search_results_fields=${AL_FIELDS}`;
+  if (opts.merchantId) url += `&merchant_id=${opts.merchantId}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`AvantLink search ${res.status}`);
   const data = await res.json();
@@ -273,7 +274,6 @@ const server = http.createServer(async (req, res) => {
           results.amazon = { ok: r.ok, status: r.status, response: parsed };
         } catch (err) { results.amazon = { ok: false, error: String(err?.message ?? err) }; }
       } else { results.amazon = { ok: false, error: 'Credentials not set' }; }
-
       if (AL_AFFILIATE && AL_WEBSITE) {
         try {
           const items = await alSearch('surfboard', { itemCount: 1 });
@@ -281,8 +281,17 @@ const server = http.createServer(async (req, res) => {
           results.avantlink = { ok: true, rawCount: items.length, mappedCount: mapped.length, sample: mapped[0] ?? null };
         } catch (err) { results.avantlink = { ok: false, error: String(err?.message ?? err) }; }
       } else { results.avantlink = { ok: false, error: 'AL_AFFILIATE_ID or AL_WEBSITE_ID not set' }; }
-
       json(res, results, 200, origin);
+      return;
+    }
+
+    if (action === 'merchants') {
+      try {
+        const mlUrl = `${AL_BASE}?module=MerchantList&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&output=json&relationship_status=approved`;
+        const r = await fetch(mlUrl);
+        const data = await r.json();
+        json(res, { ok: r.ok, merchants: Array.isArray(data) ? data.map(m => ({ id: m.lngMerchantId ?? m.merchant_id, name: m.strMerchantName ?? m.merchant_name })) : data }, 200, origin);
+      } catch (err) { json(res, { ok: false, error: String(err?.message ?? err) }, 500, origin); }
       return;
     }
 
