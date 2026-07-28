@@ -287,15 +287,14 @@ const server = http.createServer(async (req, res) => {
 
     if (action === 'merchants') {
       try {
-        const mlUrl = `${AL_BASE}?module=MerchantList&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&output=json`;
-        const r = await fetch(mlUrl);
-        const text = await r.text();
-        let data; try { data = JSON.parse(text); } catch { data = text; }
-        if (Array.isArray(data)) {
-          json(res, { ok: true, merchants: data.map(m => ({ id: m.lngMerchantId ?? m.merchant_id ?? m.Id, name: m.strMerchantName ?? m.merchant_name ?? m.Name })) }, 200, origin);
-        } else {
-          json(res, { ok: false, raw: typeof data === 'string' ? data.substring(0, 500) : data }, 200, origin);
-        }
+        const items = await alSearch('surf', { itemCount: 20 });
+        const seen = new Map();
+        items.forEach(i => {
+          const id = i['lngMerchantId'] ?? i['Merchant_Id'] ?? '?';
+          const name = i['strMerchantName'] ?? i['Merchant_Name'] ?? '?';
+          if (!seen.has(id)) seen.set(id, name);
+        });
+        json(res, { ok: true, totalResults: items.length, merchants: [...seen.entries()].map(([id, name]) => ({ id, name })) }, 200, origin);
       } catch (err) { json(res, { ok: false, error: String(err?.message ?? err) }, 500, origin); }
       return;
     }
