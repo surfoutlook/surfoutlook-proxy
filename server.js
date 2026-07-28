@@ -111,7 +111,7 @@ function mapCaItem(item, sectionTag, categorySlug) {
   };
 }
 
-const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|Buy+URL|Abbreviated+Description|Price+Discount+Percent|Merchant+Name|Merchant+Id|Product+Id';
+const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|Original+Image|Buy+URL|Abbreviated+Description|Price+Discount+Percent|Merchant+Name|Merchant+Id|Product+Id';
 
 async function alSearch(keywords, opts = {}) {
   const count = Math.min(opts.itemCount ?? 20, 20);
@@ -124,7 +124,7 @@ async function alSearch(keywords, opts = {}) {
 }
 
 function mapAlItem(item, sectionTag, categorySlug) {
-  const rawImage = item['strLargeImage'] ?? item['Large_Image'] ?? '';
+  const rawImage = item['strOriginalImage'] ?? item['Original_Image'] ?? item['strLargeImage'] ?? item['Large_Image'] ?? '';
   if (!rawImage) return null;
   const imageUrl = rawImage;
   const salePrice = parseFloat(item['dblProductSalePrice'] || item['Sale_Price'] || '0');
