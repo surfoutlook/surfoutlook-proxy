@@ -39,26 +39,26 @@ const CA_RESOURCES = [
 ];
 
 const SECTION_QUERIES = {
-  hottest:     { keywords: 'surfing gear',       sortBy: 'Relevance'          },
-  collage:     { keywords: 'surf lifestyle',      sortBy: 'Relevance'          },
-  bestofweek:  { keywords: 'surf board wetsuit',  sortBy: 'AvgCustomerReviews' },
-  favorites:   { keywords: 'popular surf gear',   sortBy: 'AvgCustomerReviews' },
+  hottest:     { keywords: 'surf',                sortBy: 'Relevance'          },
+  collage:     { keywords: 'surfboard wetsuit',   sortBy: 'Relevance'          },
+  bestofweek:  { keywords: 'surfboard',           sortBy: 'AvgCustomerReviews' },
+  favorites:   { keywords: 'wetsuit',             sortBy: 'AvgCustomerReviews' },
   deals:       { keywords: 'surf sale',           sortBy: 'Price:LowToHigh'    },
   clearance:   { keywords: 'surf clearance',      sortBy: 'Price:LowToHigh'    },
-  toppicks:    { keywords: 'top surf gear',       sortBy: 'AvgCustomerReviews' },
-  bestselling: { keywords: 'best selling surf',   sortBy: 'AvgCustomerReviews' },
+  toppicks:    { keywords: 'surf accessories',    sortBy: 'AvgCustomerReviews' },
+  bestselling: { keywords: 'surf apparel',        sortBy: 'AvgCustomerReviews' },
   savings:     { keywords: 'surf discount',       sortBy: 'Price:LowToHigh'    },
 };
 
 const CATEGORY_KEYWORDS = {
-  wetsuits: 'surf wetsuit neoprene', 'surf-apparel': 'surfing boardshorts apparel',
-  surfboards: 'surfboard', 'surf-accessories': 'surf accessories leash wax',
-  'surf-footwear': 'surf sandals water shoes', 'surf-gear': 'surf hat sunglasses waterproof watch',
-  'womens-surfwear': 'women surf swimwear rash guard bikini', sale: 'surf sale clearance discount',
-  trending: 'surf trending', bestsellers: 'surf bestseller', new: 'new surf gear', all: 'surfing',
-  brands: 'surf brand billabong quiksilver ripcurl', hurley: 'hurley surf', billabong: 'billabong surf',
-  quiksilver: 'quiksilver surf', oneill: 'oneill wetsuit surf', 'rip-curl': 'rip curl wetsuit surf',
-  roxy: 'roxy women surf', volcom: 'volcom surf', rvca: 'rvca surf', vissla: 'vissla surf wetsuit',
+  wetsuits: 'wetsuit', 'surf-apparel': 'boardshorts apparel',
+  surfboards: 'surfboard', 'surf-accessories': 'leash fins wax',
+  'surf-footwear': 'sandals water shoes', 'surf-gear': 'hat sunglasses watch',
+  'womens-surfwear': 'womens swimwear bikini rash guard', sale: 'sale clearance',
+  trending: 'surf', bestsellers: 'surfboard', new: 'surf', all: 'surf',
+  brands: 'surf', hurley: 'hurley', billabong: 'billabong',
+  quiksilver: 'quiksilver', oneill: 'oneill', 'rip-curl': 'rip curl',
+  roxy: 'roxy', volcom: 'volcom', rvca: 'rvca', vissla: 'vissla',
 };
 
 async function caSearch(keywords, opts = {}) {
