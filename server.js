@@ -122,21 +122,21 @@ async function alSearch(keywords, opts = {}) {
 }
 
 function mapAlItem(item, sectionTag, categorySlug) {
-  const imageUrl = item['Large_Image'] ?? '';
+  const imageUrl = item['strLargeImage'] ?? item['Large_Image'] ?? '';
   if (!imageUrl) return null;
-  const salePrice = parseFloat(item['Sale_Price'] || '0');
-  const retailPrice = parseFloat(item['Retail_Price'] || '0');
+  const salePrice = parseFloat(item['dblProductSalePrice'] || item['Sale_Price'] || '0');
+  const retailPrice = parseFloat(item['dblProductPrice'] || item['Retail_Price'] || '0');
   const price = salePrice > 0 ? salePrice : retailPrice;
   if (!price) return null;
   const originalPrice = retailPrice > price ? retailPrice : null;
-  const discountPct = parseFloat(item['Price_Discount_Percent'] || '0');
+  const discountPct = parseFloat(item['dblProductOnSalePercent'] || item['Price_Discount_Percent'] || '0');
   const discount = Math.round(discountPct);
-  const title = item['Product_Name'] ?? '';
-  const brand = item['Brand_Name'] ?? item['Merchant_Name'] ?? '';
-  const description = item['Abbreviated_Description'] ?? title;
-  const buyUrl = item['Buy_URL'] ?? '';
-  const merchantId = String(item['Merchant_Id'] ?? '0').padStart(4, '0');
-  const productId = String(item['Product_Id'] ?? Math.random()).replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
+  const title = item['strProductName'] ?? item['Product_Name'] ?? '';
+  const brand = item['strBrandName'] ?? item['Brand_Name'] ?? item['strMerchantName'] ?? item['Merchant_Name'] ?? '';
+  const description = item['txtAbbreviatedDescription'] ?? item['Abbreviated_Description'] ?? title;
+  const buyUrl = item['strBuyURL'] ?? item['Buy_URL'] ?? '';
+  const merchantId = String(item['lngMerchantId'] ?? item['Merchant_Id'] ?? '0').padStart(4, '0');
+  const productId = String(item['lngProductId'] ?? item['Product_Id'] ?? Math.random()).replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
   const asin = `AL${merchantId}${productId}`.substring(0, 14);
   const badge = discount >= 30 ? 'sale' : discount > 0 ? 'deal' : '';
   const catLabel = categorySlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -144,7 +144,7 @@ function mapAlItem(item, sectionTag, categorySlug) {
     asin, sectionTag, categorySlug, lastFetched: Date.now(),
     price, title, brand, imageUrl, originalPrice: originalPrice ?? 0,
     rating: 4.0, reviewCount: 0, description, category: catLabel, badge, inStock: true, discount,
-    affiliateUrl: buyUrl, network: 'avantlink', merchantName: item['Merchant_Name'] ?? '',
+    affiliateUrl: buyUrl, network: 'avantlink', merchantName: item['strMerchantName'] ?? item['Merchant_Name'] ?? '',
   };
 }
 
@@ -277,7 +277,8 @@ const server = http.createServer(async (req, res) => {
       if (AL_AFFILIATE && AL_WEBSITE) {
         try {
           const items = await alSearch('surfboard', { itemCount: 1 });
-          results.avantlink = { ok: true, itemCount: items.length, sample: items[0] ?? null };
+          const mapped = items.map(i => mapAlItem(i, 'test', 'all')).filter(Boolean);
+          results.avantlink = { ok: true, rawCount: items.length, mappedCount: mapped.length, sample: mapped[0] ?? null };
         } catch (err) { results.avantlink = { ok: false, error: String(err?.message ?? err) }; }
       } else { results.avantlink = { ok: false, error: 'AL_AFFILIATE_ID or AL_WEBSITE_ID not set' }; }
 
