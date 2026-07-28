@@ -128,7 +128,7 @@ function mapAlItem(item, sectionTag, categorySlug) {
   const rawImage = item['strLargeImage'] ?? item['Large_Image'] ?? item['Product_Image_URL'] ?? '';
   if (!rawImage) return null;
   const imageUrl = rawImage
-    ? `https://images.weserv.nl/?url=${encodeURIComponent(rawImage.replace(/^https?:\/\//, ''))}&w=800&h=800&fit=contain&we&sharp=2`
+    ? `https://images.weserv.nl/?url=${encodeURIComponent(rawImage.replace(/^https?:\/\//, ''))}&w=800&we&sharp=2`
     : rawImage;
   const salePrice = parseFloat(item['Sale_Price'] || item['dblProductSalePrice'] || '0');
   const retailPrice = parseFloat(item['Retail_Price'] || item['dblProductPrice'] || '0');
