@@ -287,62 +287,15 @@ const server = http.createServer(async (req, res) => {
 
     if (action === 'merchants') {
       try {
-        const mlUrl = `${AL_BASE}?module=MerchantList&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&output=json&relationship_status=approved`;
+        const mlUrl = `${AL_BASE}?module=MerchantList&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&output=json`;
         const r = await fetch(mlUrl);
-        const data = await r.json();
-        json(res, { ok: r.ok, merchants: Array.isArray(data) ? data.map(m => ({ id: m.lngMerchantId ?? m.merchant_id, name: m.strMerchantName ?? m.merchant_name })) : data }, 200, origin);
+        const text = await r.text();
+        let data; try { data = JSON.parse(text); } catch { data = text; }
+        if (Array.isArray(data)) {
+          json(res, { ok: true, merchants: data.map(m => ({ id: m.lngMerchantId ?? m.merchant_id ?? m.Id, name: m.strMerchantName ?? m.merchant_name ?? m.Name })) }, 200, origin);
+        } else {
+          json(res, { ok: false, raw: typeof data === 'string' ? data.substring(0, 500) : data }, 200, origin);
+        }
       } catch (err) { json(res, { ok: false, error: String(err?.message ?? err) }, 500, origin); }
       return;
     }
-
-    try {
-      if (q) json(res, { products: (await fetchSearch(q, limit)).map(toProduct), source: 'live' }, 200, origin);
-      else if (category) json(res, { products: (await fetchCategory(category, sort, page, limit)).map(toProduct), source: 'live' }, 200, origin);
-      else if (section) json(res, { products: (await fetchSection(section, limit)).map(toProduct), source: 'live' }, 200, origin);
-      else json(res, { products: [], source: 'empty' }, 200, origin);
-    } catch (err) {
-      console.error('products error:', err?.message ?? err);
-      json(res, { products: [], error: String(err?.message ?? err) }, 500, origin);
-    }
-    return;
-  }
-
-  const asinMatch = pathname.match(/^(?:\/api)?\/products\/([A-Z0-9]{10})$/);
-  if (asinMatch) {
-    if (!CLIENT_ID || !CLIENT_SECRET) { json(res, { error: 'Amazon credentials not configured.' }, 500, origin); return; }
-    try {
-      const item = await caGetItem(asinMatch[1]);
-      if (!item) { json(res, { error: 'Product not found' }, 404, origin); return; }
-      const images = [];
-      if (item.images?.primary?.large?.url) images.push(item.images.primary.large.url);
-      (item.images?.variants ?? []).forEach(v => { if (v.large?.url && !images.includes(v.large.url)) images.push(v.large.url); });
-      const listing = item.offersV2?.listings?.[0];
-      const price = listing?.price?.money?.amount ?? 0;
-      const savingBasis = listing?.price?.savingBasis?.money?.amount;
-      const originalPrice = savingBasis && savingBasis > price ? savingBasis : null;
-      const product = {
-        asin: item.asin, title: item.itemInfo?.title?.displayValue ?? '',
-        brand: item.itemInfo?.byLineInfo?.brand?.displayValue ?? item.itemInfo?.byLineInfo?.manufacturer?.displayValue ?? '',
-        price, originalPrice: originalPrice ?? undefined, imageUrl: images[0] ?? '', images,
-        category: '', categorySlug: 'all', rating: 4.2, reviewCount: 0,
-        description: (item.itemInfo?.features?.displayValues ?? []).slice(0, 3).join('. '),
-        inStock: listing?.availability?.type === 'IN_STOCK',
-        discount: originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : undefined,
-        affiliateUrl: item.detailPageURL ?? `https://www.amazon.com/dp/${item.asin}?tag=${PARTNER_TAG}`,
-        network: 'amazon',
-      };
-      json(res, { product, variants: {}, images }, 200, origin);
-    } catch (err) {
-      console.error('product detail error:', err?.message ?? err);
-      json(res, { error: String(err?.message ?? err) }, 500, origin);
-    }
-    return;
-  }
-
-  json(res, { error: 'Not found' }, 404, origin);
-});
-
-server.listen(PORT, () => {
-  console.log(`SurfOutlook proxy running on port ${PORT}`);
-  console.log(`Amazon: ${CLIENT_ID ? 'configured' : 'NOT SET'} | AvantLink: ${AL_AFFILIATE ? 'configured' : 'NOT SET'}`);
-});
