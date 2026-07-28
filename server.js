@@ -113,7 +113,7 @@ function mapCaItem(item, sectionTag, categorySlug) {
 const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|Buy+URL|Abbreviated+Description|Price+Discount+Percent|Merchant+Name|Merchant+Id|Product+Id';
 
 async function alSearch(keywords, opts = {}) {
-  const count = Math.min(opts.itemCount ?? 10, 20);
+  const count = Math.min(opts.itemCount ?? 20, 20);
   const url = `${AL_BASE}?module=ProductSearch&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&search_term=${encodeURIComponent(keywords)}&output=json&search_results_count=${count}&search_results_fields=${AL_FIELDS}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`AvantLink search ${res.status}`);
@@ -187,7 +187,7 @@ async function fetchSection(section, limit) {
     : (section === 'favorites' || section === 'toppicks' || section === 'bestselling') ? 'trending' : 'all';
   const [caResult, alResult] = await Promise.allSettled([
     CLIENT_ID && CLIENT_SECRET ? caSearch(query.keywords, { itemCount: 5, sortBy: query.sortBy }) : Promise.resolve([]),
-    AL_AFFILIATE && AL_WEBSITE ? alSearch(query.keywords, { itemCount: 5 }) : Promise.resolve([]),
+    AL_AFFILIATE && AL_WEBSITE ? alSearch(query.keywords, { itemCount: 20 }) : Promise.resolve([]),
   ]);
   const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, section, catSlug)).filter(Boolean);
   const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, section, catSlug)).filter(Boolean);
@@ -207,7 +207,7 @@ async function fetchCategory(slug, sort, page, limit) {
     : sort === 'newest' ? 'NewestArrivals' : 'Relevance';
   const [caResult, alResult] = await Promise.allSettled([
     CLIENT_ID && CLIENT_SECRET ? caSearch(keywords, { itemCount: 5, sortBy }) : Promise.resolve([]),
-    AL_AFFILIATE && AL_WEBSITE ? alSearch(keywords, { itemCount: 5 }) : Promise.resolve([]),
+    AL_AFFILIATE && AL_WEBSITE ? alSearch(keywords, { itemCount: 20 }) : Promise.resolve([]),
   ]);
   const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, key, slug)).filter(Boolean);
   const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, key, slug)).filter(Boolean);
@@ -222,7 +222,7 @@ async function fetchSearch(q, limit) {
   if (cached) return cached.slice(0, limit);
   const [caResult, alResult] = await Promise.allSettled([
     CLIENT_ID && CLIENT_SECRET ? caSearch(`${q} surf`, { itemCount: 5 }) : Promise.resolve([]),
-    AL_AFFILIATE && AL_WEBSITE ? alSearch(`${q} surf`, { itemCount: 5 }) : Promise.resolve([]),
+    AL_AFFILIATE && AL_WEBSITE ? alSearch(`${q} surf`, { itemCount: 20 }) : Promise.resolve([]),
   ]);
   const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, key, 'all')).filter(Boolean);
   const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, key, 'all')).filter(Boolean);
