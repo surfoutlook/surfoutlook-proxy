@@ -86,8 +86,9 @@ async function caGetItem(asin) {
 }
 
 function mapCaItem(item, sectionTag, categorySlug) {
-  const imageUrl = item.images?.primary?.large?.url ?? '';
-  if (!imageUrl) return null;
+  const rawImage = item.images?.primary?.large?.url ?? '';
+  if (!rawImage) return null;
+  const imageUrl = rawImage.replace(/\._[A-Z0-9,_]+_\./, '.');
   const listing = item.offersV2?.listings?.[0];
   const price = listing?.price?.money?.amount ?? 0;
   if (!price) return null;
@@ -123,8 +124,9 @@ async function alSearch(keywords, opts = {}) {
 }
 
 function mapAlItem(item, sectionTag, categorySlug) {
-  const imageUrl = item['strLargeImage'] ?? item['Large_Image'] ?? '';
-  if (!imageUrl) return null;
+  const rawImage = item['strLargeImage'] ?? item['Large_Image'] ?? '';
+  if (!rawImage) return null;
+  const imageUrl = rawImage.replace(/\/l(\d+\.)/, '/$1');
   const salePrice = parseFloat(item['dblProductSalePrice'] || item['Sale_Price'] || '0');
   const retailPrice = parseFloat(item['dblProductPrice'] || item['Retail_Price'] || '0');
   const price = salePrice > 0 ? salePrice : retailPrice;
