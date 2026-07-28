@@ -4,9 +4,12 @@ const PORT          = process.env.PORT           || 3001;
 const CLIENT_ID     = process.env.PA_ACCESS_KEY  ?? '';
 const CLIENT_SECRET = process.env.PA_SECRET_KEY  ?? '';
 const PARTNER_TAG   = process.env.PA_PARTNER_TAG ?? 'sursho-20';
+const AL_AFFILIATE  = process.env.AL_AFFILIATE_ID ?? '';
+const AL_WEBSITE    = process.env.AL_WEBSITE_ID   ?? '';
 const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
 const TOKEN_URL     = 'https://api.amazon.com/auth/o2/token';
-const API_BASE      = 'https://creatorsapi.amazon';
+const CA_BASE       = 'https://creatorsapi.amazon';
+const AL_BASE       = 'https://classic.avantlink.com/api.php';
 const MARKETPLACE   = 'www.amazon.com';
 
 let tokenCache = { token: null, expiresAt: 0 };
@@ -25,11 +28,11 @@ async function getToken() {
   return tokenCache.token;
 }
 
-function apiHeaders(token) {
+function caHeaders(token) {
   return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'x-marketplace': MARKETPLACE };
 }
 
-const RESOURCES = [
+const CA_RESOURCES = [
   'images.primary.large', 'images.variants.large',
   'itemInfo.title', 'itemInfo.features', 'itemInfo.byLineInfo',
   'offersV2.listings.price', 'offersV2.listings.availability',
@@ -65,27 +68,24 @@ async function caSearch(keywords, opts = {}) {
     searchIndex: 'SportsAndOutdoors',
     itemCount: Math.min(opts.itemCount ?? 10, 10),
     sortBy: opts.sortBy ?? 'Relevance',
-    resources: RESOURCES,
+    resources: CA_RESOURCES,
   };
-  const res = await fetch(`${API_BASE}/catalog/v1/searchItems`, { method: 'POST', headers: apiHeaders(token), body: JSON.stringify(payload) });
-  if (!res.ok) throw new Error(`SearchItems ${res.status}: ${await res.text().catch(() => '')}`);
+  const res = await fetch(`${CA_BASE}/catalog/v1/searchItems`, { method: 'POST', headers: caHeaders(token), body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(`CA SearchItems ${res.status}: ${await res.text().catch(() => '')}`);
   const data = await res.json();
   return data?.searchResult?.items ?? [];
 }
 
 async function caGetItem(asin) {
   const token = await getToken();
-  const payload = {
-    partnerTag: PARTNER_TAG, itemIds: [asin], itemIdType: 'ASIN', marketplace: MARKETPLACE,
-    resources: [...RESOURCES, 'variationSummary'],
-  };
-  const res = await fetch(`${API_BASE}/catalog/v1/getItems`, { method: 'POST', headers: apiHeaders(token), body: JSON.stringify(payload) });
-  if (!res.ok) throw new Error(`GetItems ${res.status}`);
+  const payload = { partnerTag: PARTNER_TAG, itemIds: [asin], itemIdType: 'ASIN', marketplace: MARKETPLACE, resources: [...CA_RESOURCES, 'variationSummary'] };
+  const res = await fetch(`${CA_BASE}/catalog/v1/getItems`, { method: 'POST', headers: caHeaders(token), body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(`CA GetItems ${res.status}`);
   const data = await res.json();
   return data?.itemsResult?.items?.[0] ?? null;
 }
 
-function mapItem(item, sectionTag, categorySlug) {
+function mapCaItem(item, sectionTag, categorySlug) {
   const imageUrl = item.images?.primary?.large?.url ?? '';
   if (!imageUrl) return null;
   const listing = item.offersV2?.listings?.[0];
@@ -106,6 +106,45 @@ function mapItem(item, sectionTag, categorySlug) {
     price, title, brand, imageUrl, originalPrice: originalPrice ?? 0,
     rating: 4.2, reviewCount: 0, description, category: catLabel, badge, inStock, discount,
     affiliateUrl: item.detailPageURL ?? `https://www.amazon.com/dp/${item.asin}?tag=${PARTNER_TAG}`,
+    network: 'amazon',
+  };
+}
+
+const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|Buy+URL|Abbreviated+Description|Price+Discount+Percent|Merchant+Name|Merchant+Id|Product+Id';
+
+async function alSearch(keywords, opts = {}) {
+  const count = Math.min(opts.itemCount ?? 10, 20);
+  const url = `${AL_BASE}?module=ProductSearch&affiliate_id=${AL_AFFILIATE}&website_id=${AL_WEBSITE}&search_term=${encodeURIComponent(keywords)}&output=json&search_results_count=${count}&search_results_fields=${AL_FIELDS}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`AvantLink search ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+function mapAlItem(item, sectionTag, categorySlug) {
+  const imageUrl = item['Large_Image'] ?? '';
+  if (!imageUrl) return null;
+  const salePrice = parseFloat(item['Sale_Price'] || '0');
+  const retailPrice = parseFloat(item['Retail_Price'] || '0');
+  const price = salePrice > 0 ? salePrice : retailPrice;
+  if (!price) return null;
+  const originalPrice = retailPrice > price ? retailPrice : null;
+  const discountPct = parseFloat(item['Price_Discount_Percent'] || '0');
+  const discount = Math.round(discountPct);
+  const title = item['Product_Name'] ?? '';
+  const brand = item['Brand_Name'] ?? item['Merchant_Name'] ?? '';
+  const description = item['Abbreviated_Description'] ?? title;
+  const buyUrl = item['Buy_URL'] ?? '';
+  const merchantId = String(item['Merchant_Id'] ?? '0').padStart(4, '0');
+  const productId = String(item['Product_Id'] ?? Math.random()).replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
+  const asin = `AL${merchantId}${productId}`.substring(0, 14);
+  const badge = discount >= 30 ? 'sale' : discount > 0 ? 'deal' : '';
+  const catLabel = categorySlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return {
+    asin, sectionTag, categorySlug, lastFetched: Date.now(),
+    price, title, brand, imageUrl, originalPrice: originalPrice ?? 0,
+    rating: 4.0, reviewCount: 0, description, category: catLabel, badge, inStock: true, discount,
+    affiliateUrl: buyUrl, network: 'avantlink', merchantName: item['Merchant_Name'] ?? '',
   };
 }
 
@@ -117,7 +156,7 @@ function toProduct(p) {
     subcategory: p.category, rating: p.rating, reviewCount: p.reviewCount,
     description: p.description, badge: p.badge || undefined, inStock: p.inStock,
     discount: p.originalPrice > 0 ? Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100) : undefined,
-    affiliateUrl: p.affiliateUrl,
+    affiliateUrl: p.affiliateUrl, network: p.network, merchantName: p.merchantName,
   };
 }
 
@@ -129,17 +168,32 @@ function getCached(key) {
 }
 function setCached(key, data) { cache.set(key, { ts: Date.now(), data }); }
 
+function interleave(a, b) {
+  const result = [];
+  const max = Math.max(a.length, b.length);
+  for (let i = 0; i < max; i++) {
+    if (i < a.length) result.push(a[i]);
+    if (i < b.length) result.push(b[i]);
+  }
+  return result;
+}
+
 async function fetchSection(section, limit) {
   const cached = getCached(`section:${section}`);
   if (cached) return cached.slice(0, limit);
   const query = SECTION_QUERIES[section];
   if (!query) return [];
-  const items = await caSearch(query.keywords, { itemCount: Math.min(10, limit + 2), sortBy: query.sortBy });
   const catSlug = (section === 'deals' || section === 'clearance' || section === 'savings') ? 'sale'
     : (section === 'favorites' || section === 'toppicks' || section === 'bestselling') ? 'trending' : 'all';
-  const mapped = items.map(i => mapItem(i, section, catSlug)).filter(Boolean);
-  setCached(`section:${section}`, mapped);
-  return mapped.slice(0, limit);
+  const [caResult, alResult] = await Promise.allSettled([
+    CLIENT_ID && CLIENT_SECRET ? caSearch(query.keywords, { itemCount: 5, sortBy: query.sortBy }) : Promise.resolve([]),
+    AL_AFFILIATE && AL_WEBSITE ? alSearch(query.keywords, { itemCount: 5 }) : Promise.resolve([]),
+  ]);
+  const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, section, catSlug)).filter(Boolean);
+  const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, section, catSlug)).filter(Boolean);
+  const merged = interleave(caMapped, alMapped);
+  setCached(`section:${section}`, merged);
+  return merged.slice(0, limit);
 }
 
 async function fetchCategory(slug, sort, page, limit) {
@@ -151,20 +205,30 @@ async function fetchCategory(slug, sort, page, limit) {
   const sortBy = sort === 'price_asc' ? 'Price:LowToHigh' : sort === 'price_desc' ? 'Price:HighToLow'
     : sort === 'rating' || sort === 'bestseller' ? 'AvgCustomerReviews'
     : sort === 'newest' ? 'NewestArrivals' : 'Relevance';
-  const items = await caSearch(keywords, { itemCount: 10, sortBy });
-  const mapped = items.map(i => mapItem(i, key, slug)).filter(Boolean);
-  setCached(key, mapped);
-  return mapped.slice(offset, offset + limit);
+  const [caResult, alResult] = await Promise.allSettled([
+    CLIENT_ID && CLIENT_SECRET ? caSearch(keywords, { itemCount: 5, sortBy }) : Promise.resolve([]),
+    AL_AFFILIATE && AL_WEBSITE ? alSearch(keywords, { itemCount: 5 }) : Promise.resolve([]),
+  ]);
+  const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, key, slug)).filter(Boolean);
+  const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, key, slug)).filter(Boolean);
+  const merged = interleave(caMapped, alMapped);
+  setCached(key, merged);
+  return merged.slice(offset, offset + limit);
 }
 
 async function fetchSearch(q, limit) {
   const key = `search:${q.toLowerCase().trim()}`;
   const cached = getCached(key);
   if (cached) return cached.slice(0, limit);
-  const items = await caSearch(`${q} surf`, { itemCount: Math.min(limit, 10) });
-  const mapped = items.map(i => mapItem(i, key, 'all')).filter(Boolean);
-  setCached(key, mapped);
-  return mapped.slice(0, limit);
+  const [caResult, alResult] = await Promise.allSettled([
+    CLIENT_ID && CLIENT_SECRET ? caSearch(`${q} surf`, { itemCount: 5 }) : Promise.resolve([]),
+    AL_AFFILIATE && AL_WEBSITE ? alSearch(`${q} surf`, { itemCount: 5 }) : Promise.resolve([]),
+  ]);
+  const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, key, 'all')).filter(Boolean);
+  const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, key, 'all')).filter(Boolean);
+  const merged = interleave(caMapped, alMapped);
+  setCached(key, merged);
+  return merged.slice(0, limit);
 }
 
 function corsHeaders(origin) {
@@ -183,34 +247,48 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname.replace(/\/+$/, '');
 
-  if (pathname === '' || pathname === '/') { json(res, { ok: true, service: 'SurfOutlook Creators API Proxy' }, 200, origin); return; }
+  if (pathname === '' || pathname === '/') {
+    json(res, { ok: true, service: 'SurfOutlook Proxy', amazon: !!(CLIENT_ID && CLIENT_SECRET), avantlink: !!(AL_AFFILIATE && AL_WEBSITE) }, 200, origin);
+    return;
+  }
 
   if (pathname === '/api/products' || pathname === '/products') {
-    if (!CLIENT_ID || !CLIENT_SECRET) { json(res, { ok: false, error: 'PA_ACCESS_KEY and PA_SECRET_KEY not set.' }, 500, origin); return; }
-    const action = url.searchParams.get('action');
-    const section = url.searchParams.get('section');
+    const action   = url.searchParams.get('action');
+    const section  = url.searchParams.get('section');
     const category = url.searchParams.get('category');
-    const q = url.searchParams.get('q');
-    const sort = url.searchParams.get('sort') ?? 'featured';
-    const page = parseInt(url.searchParams.get('page') ?? '1', 10);
-    const limit = parseInt(url.searchParams.get('limit') ?? '20', 10);
+    const q        = url.searchParams.get('q');
+    const sort     = url.searchParams.get('sort') ?? 'featured';
+    const page     = parseInt(url.searchParams.get('page') ?? '1', 10);
+    const limit    = parseInt(url.searchParams.get('limit') ?? '20', 10);
 
     if (action === 'test') {
-      try {
-        const token = await getToken();
-        const payload = { partnerTag: PARTNER_TAG, keywords: 'surfboard', marketplace: MARKETPLACE, itemCount: 1, resources: ['itemInfo.title', 'images.primary.large', 'offersV2.listings.price'] };
-        const r = await fetch(`${API_BASE}/catalog/v1/searchItems`, { method: 'POST', headers: apiHeaders(token), body: JSON.stringify(payload) });
-        const text = await r.text();
-        let parsed; try { parsed = JSON.parse(text); } catch { parsed = text; }
-        json(res, { ok: r.ok, status: r.status, partnerTag: PARTNER_TAG, clientIdPrefix: CLIENT_ID.substring(0, 10) + '...', response: parsed }, 200, origin);
-      } catch (err) { json(res, { ok: false, error: String(err?.message ?? err) }, 500, origin); }
+      const results = {};
+      if (CLIENT_ID && CLIENT_SECRET) {
+        try {
+          const token = await getToken();
+          const payload = { partnerTag: PARTNER_TAG, keywords: 'surfboard', marketplace: MARKETPLACE, itemCount: 1, resources: ['itemInfo.title'] };
+          const r = await fetch(`${CA_BASE}/catalog/v1/searchItems`, { method: 'POST', headers: caHeaders(token), body: JSON.stringify(payload) });
+          const text = await r.text();
+          let parsed; try { parsed = JSON.parse(text); } catch { parsed = text; }
+          results.amazon = { ok: r.ok, status: r.status, response: parsed };
+        } catch (err) { results.amazon = { ok: false, error: String(err?.message ?? err) }; }
+      } else { results.amazon = { ok: false, error: 'Credentials not set' }; }
+
+      if (AL_AFFILIATE && AL_WEBSITE) {
+        try {
+          const items = await alSearch('surfboard', { itemCount: 1 });
+          results.avantlink = { ok: true, itemCount: items.length, sample: items[0] ?? null };
+        } catch (err) { results.avantlink = { ok: false, error: String(err?.message ?? err) }; }
+      } else { results.avantlink = { ok: false, error: 'AL_AFFILIATE_ID or AL_WEBSITE_ID not set' }; }
+
+      json(res, results, 200, origin);
       return;
     }
 
     try {
-      if (q) json(res, { products: (await fetchSearch(q, limit)).map(toProduct), source: 'amazon' }, 200, origin);
-      else if (category) json(res, { products: (await fetchCategory(category, sort, page, limit)).map(toProduct), source: 'amazon' }, 200, origin);
-      else if (section) json(res, { products: (await fetchSection(section, limit)).map(toProduct), source: 'amazon' }, 200, origin);
+      if (q) json(res, { products: (await fetchSearch(q, limit)).map(toProduct), source: 'live' }, 200, origin);
+      else if (category) json(res, { products: (await fetchCategory(category, sort, page, limit)).map(toProduct), source: 'live' }, 200, origin);
+      else if (section) json(res, { products: (await fetchSection(section, limit)).map(toProduct), source: 'live' }, 200, origin);
       else json(res, { products: [], source: 'empty' }, 200, origin);
     } catch (err) {
       console.error('products error:', err?.message ?? err);
@@ -221,7 +299,7 @@ const server = http.createServer(async (req, res) => {
 
   const asinMatch = pathname.match(/^(?:\/api)?\/products\/([A-Z0-9]{10})$/);
   if (asinMatch) {
-    if (!CLIENT_ID || !CLIENT_SECRET) { json(res, { error: 'Credentials not configured.' }, 500, origin); return; }
+    if (!CLIENT_ID || !CLIENT_SECRET) { json(res, { error: 'Amazon credentials not configured.' }, 500, origin); return; }
     try {
       const item = await caGetItem(asinMatch[1]);
       if (!item) { json(res, { error: 'Product not found' }, 404, origin); return; }
@@ -241,6 +319,7 @@ const server = http.createServer(async (req, res) => {
         inStock: listing?.availability?.type === 'IN_STOCK',
         discount: originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : undefined,
         affiliateUrl: item.detailPageURL ?? `https://www.amazon.com/dp/${item.asin}?tag=${PARTNER_TAG}`,
+        network: 'amazon',
       };
       json(res, { product, variants: {}, images }, 200, origin);
     } catch (err) {
@@ -255,5 +334,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`SurfOutlook proxy running on port ${PORT}`);
-  if (!CLIENT_ID || !CLIENT_SECRET) console.warn('WARNING: PA_ACCESS_KEY or PA_SECRET_KEY not set.');
+  console.log(`Amazon: ${CLIENT_ID ? 'configured' : 'NOT SET'} | AvantLink: ${AL_AFFILIATE ? 'configured' : 'NOT SET'}`);
 });
