@@ -126,7 +126,7 @@ async function alSearch(keywords, opts = {}) {
 function mapAlItem(item, sectionTag, categorySlug) {
   const rawImage = item['strLargeImage'] ?? item['Large_Image'] ?? '';
   if (!rawImage) return null;
-  const imageUrl = rawImage;
+  const imageUrl = rawImage.replace(/\/l(\d+\.(jpg|jpeg|png|webp|gif))/i, '/o$1');
   const salePrice = parseFloat(item['dblProductSalePrice'] || item['Sale_Price'] || '0');
   const retailPrice = parseFloat(item['dblProductPrice'] || item['Retail_Price'] || '0');
   const price = salePrice > 0 ? salePrice : retailPrice;
@@ -350,5 +350,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`SurfOutlook proxy running on port ${PORT}`);
-  console.log(`Amazon: ${CLIENT_ID ? 'configured' : 'NOT SET'} | AvantLink: ${AL_AFFILIATE ? 'configured' : 'NOT SET'}`);
+  console.log(`Amazon: ${CLIENT_ID ? 'configured' : 'NOT SET'} | AvantLink: ${AL_AFFILIATE ? 'configured' => 'NOT SET'}`);
 });
