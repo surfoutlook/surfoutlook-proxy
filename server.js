@@ -111,6 +111,7 @@ function mapCaItem(item, sectionTag, categorySlug) {
   };
 }
 
+const AL_MERCHANT_IDS = '10270,12809';
 const AL_FIELDS = 'Product+Name|Brand+Name|Retail+Price|Sale+Price|Large+Image|Buy+URL|Abbreviated+Description|Price+Discount+Percent|Merchant+Name|Merchant+Id|Product+Id';
 
 async function alSearch(keywords, opts = {}) {
@@ -124,22 +125,24 @@ async function alSearch(keywords, opts = {}) {
 }
 
 function mapAlItem(item, sectionTag, categorySlug) {
-  const rawImage = item['strLargeImage'] ?? item['Large_Image'] ?? '';
+  const rawImage = item['strLargeImage'] ?? item['Large_Image'] ?? item['Product_Image_URL'] ?? '';
   if (!rawImage) return null;
-  const imageUrl = rawImage;
-  const salePrice = parseFloat(item['dblProductSalePrice'] || item['Sale_Price'] || '0');
-  const retailPrice = parseFloat(item['dblProductPrice'] || item['Retail_Price'] || '0');
+  const imageUrl = rawImage
+    ? `https://images.weserv.nl/?url=${encodeURIComponent(rawImage.replace(/^https?:\/\//, ''))}&w=800&h=800&fit=contain&we&sharp=2`
+    : rawImage;
+  const salePrice = parseFloat(item['Sale_Price'] || item['dblProductSalePrice'] || '0');
+  const retailPrice = parseFloat(item['Retail_Price'] || item['dblProductPrice'] || '0');
   const price = salePrice > 0 ? salePrice : retailPrice;
   if (!price) return null;
   const originalPrice = retailPrice > price ? retailPrice : null;
-  const discountPct = parseFloat(item['dblProductOnSalePercent'] || item['Price_Discount_Percent'] || '0');
+  const discountPct = parseFloat(item['Discount_Percent'] || item['dblProductOnSalePercent'] || '0');
   const discount = Math.round(discountPct);
-  const title = item['strProductName'] ?? item['Product_Name'] ?? '';
-  const brand = item['strBrandName'] ?? item['Brand_Name'] ?? item['strMerchantName'] ?? item['Merchant_Name'] ?? '';
-  const description = item['txtAbbreviatedDescription'] ?? item['Abbreviated_Description'] ?? title;
-  const buyUrl = item['strBuyURL'] ?? item['Buy_URL'] ?? '';
-  const merchantId = String(item['lngMerchantId'] ?? item['Merchant_Id'] ?? '0').padStart(4, '0');
-  const productId = String(item['lngProductId'] ?? item['Product_Id'] ?? Math.random()).replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
+  const title = item['Product_Name'] ?? item['strProductName'] ?? '';
+  const brand = item['Brand_Name'] ?? item['strBrandName'] ?? item['Merchant_Name'] ?? item['strMerchantName'] ?? '';
+  const description = item['Short_Description'] ?? item['txtAbbreviatedDescription'] ?? item['Abbreviated_Description'] ?? title;
+  const buyUrl = item['Buy_URL'] ?? item['strBuyURL'] ?? '';
+  const merchantId = String(item['Merchant_Id'] ?? item['lngMerchantId'] ?? '0').padStart(4, '0');
+  const productId = String(item['Product_Id'] ?? item['lngProductId'] ?? Math.random()).replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
   const asin = `AL${merchantId}${productId}`.substring(0, 14);
   const badge = discount >= 30 ? 'sale' : discount > 0 ? 'deal' : '';
   const catLabel = categorySlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -147,7 +150,7 @@ function mapAlItem(item, sectionTag, categorySlug) {
     asin, sectionTag, categorySlug, lastFetched: Date.now(),
     price, title, brand, imageUrl, originalPrice: originalPrice ?? 0,
     rating: 4.0, reviewCount: 0, description, category: catLabel, badge, inStock: true, discount,
-    affiliateUrl: buyUrl, network: 'avantlink', merchantName: item['strMerchantName'] ?? item['Merchant_Name'] ?? '',
+    affiliateUrl: buyUrl, network: 'avantlink', merchantName: item['Merchant_Name'] ?? item['strMerchantName'] ?? '',
   };
 }
 
@@ -188,10 +191,12 @@ async function fetchSection(section, limit) {
   if (!query) return [];
   const catSlug = (section === 'deals' || section === 'clearance' || section === 'savings') ? 'sale'
     : (section === 'favorites' || section === 'toppicks' || section === 'bestselling') ? 'trending' : 'all';
+
   const [caResult, alResult] = await Promise.allSettled([
     CLIENT_ID && CLIENT_SECRET ? caSearch(query.keywords, { itemCount: 5, sortBy: query.sortBy }) : Promise.resolve([]),
     AL_AFFILIATE && AL_WEBSITE ? alSearch(query.keywords, { itemCount: 20 }) : Promise.resolve([]),
   ]);
+
   const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, section, catSlug)).filter(Boolean);
   const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, section, catSlug)).filter(Boolean);
   const merged = interleave(caMapped, alMapped);
@@ -208,10 +213,12 @@ async function fetchCategory(slug, sort, page, limit) {
   const sortBy = sort === 'price_asc' ? 'Price:LowToHigh' : sort === 'price_desc' ? 'Price:HighToLow'
     : sort === 'rating' || sort === 'bestseller' ? 'AvgCustomerReviews'
     : sort === 'newest' ? 'NewestArrivals' : 'Relevance';
+
   const [caResult, alResult] = await Promise.allSettled([
     CLIENT_ID && CLIENT_SECRET ? caSearch(keywords, { itemCount: 5, sortBy }) : Promise.resolve([]),
     AL_AFFILIATE && AL_WEBSITE ? alSearch(keywords, { itemCount: 20 }) : Promise.resolve([]),
   ]);
+
   const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, key, slug)).filter(Boolean);
   const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, key, slug)).filter(Boolean);
   const merged = interleave(caMapped, alMapped);
@@ -223,10 +230,12 @@ async function fetchSearch(q, limit) {
   const key = `search:${q.toLowerCase().trim()}`;
   const cached = getCached(key);
   if (cached) return cached.slice(0, limit);
+
   const [caResult, alResult] = await Promise.allSettled([
     CLIENT_ID && CLIENT_SECRET ? caSearch(`${q} surf`, { itemCount: 5 }) : Promise.resolve([]),
     AL_AFFILIATE && AL_WEBSITE ? alSearch(`${q} surf`, { itemCount: 20 }) : Promise.resolve([]),
   ]);
+
   const caMapped = (caResult.status === 'fulfilled' ? caResult.value : []).map(i => mapCaItem(i, key, 'all')).filter(Boolean);
   const alMapped = (alResult.status === 'fulfilled' ? alResult.value : []).map(i => mapAlItem(i, key, 'all')).filter(Boolean);
   const merged = interleave(caMapped, alMapped);
@@ -276,6 +285,7 @@ const server = http.createServer(async (req, res) => {
           results.amazon = { ok: r.ok, status: r.status, response: parsed };
         } catch (err) { results.amazon = { ok: false, error: String(err?.message ?? err) }; }
       } else { results.amazon = { ok: false, error: 'Credentials not set' }; }
+
       if (AL_AFFILIATE && AL_WEBSITE) {
         try {
           const items = await alSearch('surfboard', { itemCount: 1 });
@@ -283,6 +293,7 @@ const server = http.createServer(async (req, res) => {
           results.avantlink = { ok: true, rawCount: items.length, mappedCount: mapped.length, sample: mapped[0] ?? null };
         } catch (err) { results.avantlink = { ok: false, error: String(err?.message ?? err) }; }
       } else { results.avantlink = { ok: false, error: 'AL_AFFILIATE_ID or AL_WEBSITE_ID not set' }; }
+
       json(res, results, 200, origin);
       return;
     }
