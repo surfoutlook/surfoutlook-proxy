@@ -350,5 +350,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`SurfOutlook proxy running on port ${PORT}`);
-  console.log(`Amazon: ${CLIENT_ID ? 'configured' : 'NOT SET'} | AvantLink: ${AL_AFFILIATE ? 'configured' => 'NOT SET'}`);
+  console.log(`Amazon: ${CLIENT_ID ? 'configured' : 'NOT SET'} | AvantLink: ${AL_AFFILIATE ? 'configured' : 'NOT SET'}`);
 });
